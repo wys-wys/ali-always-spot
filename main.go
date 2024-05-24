@@ -3,6 +3,7 @@ package main
 
 import (
 	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -47,10 +48,25 @@ func main() {
 func run() error {
 	createCh := make(chan struct{})
 	createDoneCh := make(chan struct{})
-	// 1. Release EIP
+	// 1. Release available EIP
 	go func() {
 		tk := time.NewTicker(30 * time.Minute)
 		defer tk.Stop()
+
+		for {
+			select {
+			case <-tk.C:
+				eips, err := client.HasAvaliableEipAddress()
+				if err != nil {
+					slog.Error("HasAvaliableEipAddress query failed", err)
+					continue
+				}
+				err = client.ReleaseEips(eips)
+				if err != nil {
+					slog.Error("ReleaseEip failed", "err", err)
+				}
+			}
+		}
 
 		// DescribeEipAddress
 		// if not assosiate delete
@@ -60,7 +76,7 @@ func run() error {
 
 	// 2. Loop describe instances
 	go func() {
-		tk := time.NewTicker(3 * time.Second)
+		tk := time.NewTicker(30 * time.Second)
 		defer tk.Stop()
 		for {
 			select {
@@ -71,7 +87,7 @@ func run() error {
 					continue
 				}
 				if instances != nil {
-					if len(instances.Instance) != 1 {
+					if len(instances.Instance) != 0 {
 						log.Println("instance exist, skip...")
 					} else {
 						createCh <- struct{}{}
@@ -88,7 +104,12 @@ func run() error {
 		case <-createCh:
 			// create instance
 			log.Println("begin create new instance...")
-			client.RunInstances()
+			res, err := client.RunInstances()
+			if err != nil {
+				slog.Error("create instance failed", "err")
+			} else {
+				slog.Info("create instance success!!", "ins info", *res)
+			}
 			createDoneCh <- struct{}{}
 		}
 	}

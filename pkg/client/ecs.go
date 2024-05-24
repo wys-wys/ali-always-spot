@@ -2,12 +2,14 @@ package client
 
 import (
 	"errors"
+	"fmt"
 	"log/slog"
+	"math/rand"
+	"time"
 
 	openapi "github.com/alibabacloud-go/darabonba-openapi/client"
 	ecs20140526 "github.com/alibabacloud-go/ecs-20140526/v4/client"
 	"github.com/alibabacloud-go/tea/tea"
-	vpc20160428 "github.com/alibabacloud-go/vpc-20160428/v6/client"
 
 	"github.com/Mr-LvGJ/ali-always-spot/pkg/setting"
 )
@@ -46,9 +48,6 @@ func DescribeInstances() (*ecs20140526.DescribeInstancesResponseBodyInstances, e
 		return nil, err
 	}
 	return resp.Body.Instances, nil
-}
-
-func DescribeEipAddress(zoneId string) {
 }
 
 func GetImageId() (*string, error) {
@@ -104,7 +103,7 @@ func DescribePriceAndGetAvailableZone() (*string, error) {
 	return nil, errors.New("can not find discount zone")
 }
 
-func getSecurityGroupId() (*string, error) {
+func getOrCreateSecurityGroupId() (*string, error) {
 	result, err := ecsClient.DescribeSecurityGroups(&ecs20140526.DescribeSecurityGroupsRequest{
 		RegionId: setting.C().RegionId,
 	})
@@ -127,32 +126,8 @@ func getSecurityGroupId() (*string, error) {
 	return result.Body.SecurityGroups.SecurityGroup[0].SecurityGroupId, nil
 }
 
-func getVswitchId(zoneId string) (*string, error) {
-	result, err := ecsClient.DescribeVSwitches(&ecs20140526.DescribeVSwitchesRequest{
-		RegionId: setting.C().RegionId,
-		ZoneId:   tea.String(zoneId),
-	})
-	if err != nil {
-		return nil, err
-	}
-	if *result.Body.TotalCount == 0 {
-		vpcClient.CreateDefaultVpc(&vpc20160428.CreateDefaultVpcRequest{
-			RegionId: setting.C().RegionId,
-		})
-
-		vs, err := vpcClient.CreateDefaultVSwitch(&vpc20160428.CreateDefaultVSwitchRequest{
-			RegionId: setting.C().RegionId,
-			ZoneId:   tea.String(zoneId),
-		})
-		if err != nil {
-			return nil, err
-		}
-		return vs.Body.VSwitchId, nil
-	}
-	return result.Body.VSwitches.VSwitch[0].VSwitchId, nil
-}
-
 func RunInstances() (*string, error) {
+	var retInfo string
 	zone, err := DescribePriceAndGetAvailableZone()
 	if err != nil {
 		slog.Error("DescribePriceAndGetAvailableZone failed", err)
@@ -165,17 +140,19 @@ func RunInstances() (*string, error) {
 		return nil, err
 	}
 
-	sgId, err := getSecurityGroupId()
+	sgId, err := getOrCreateSecurityGroupId()
 	if err != nil {
 		slog.Error("getSecurityGroupId failed", err)
 		return nil, err
 	}
 
-	vsId, err := getVswitchId(*zone)
+	vsId, err := getOrCreateVswitchId(*zone)
 	if err != nil {
 		slog.Error("getVswitchId failed", err)
 		return nil, err
 	}
+
+	password := generateRandomString(10)
 
 	req := &ecs20140526.RunInstancesRequest{
 		RegionId:        setting.C().RegionId,
@@ -183,7 +160,7 @@ func RunInstances() (*string, error) {
 		InstanceType:    tea.String("ecs.n1.tiny"),
 		SecurityGroupId: sgId,
 		VSwitchId:       vsId,
-		Password:        tea.String("adminadmin123123"),
+		Password:        tea.String(password),
 		ZoneId:          zone,
 		SystemDisk: &ecs20140526.RunInstancesRequestSystemDisk{
 			Size:     tea.String("20"),
@@ -195,5 +172,48 @@ func RunInstances() (*string, error) {
 	}
 	slog.Info("RunInstances request", *req)
 
-	return nil, nil
+	ins, err := ecsClient.RunInstances(req)
+	if err != nil {
+		slog.Error("RunInstance failed", "err", err)
+		return nil, err
+	}
+	insId := ins.Body.InstanceIdSets.InstanceIdSet[0]
+
+	cbpId, err := getOrCreateCommonBandwidthPackages()
+	if err != nil {
+		slog.Error("getOrCreateCommonBandwidthPackages failed", err)
+		return nil, err
+	}
+
+	eipId, ipAddr, err := getOrCreateEip()
+	if err != nil {
+		slog.Error("getOrCreateEip failed", err)
+		return nil, err
+	}
+
+	err = addEipToCBP(eipId, cbpId)
+	if err != nil {
+		slog.Error("addEipToCBP failed", err)
+		return nil, err
+	}
+
+	err = associateEipAddress(insId, eipId)
+	if err != nil {
+		slog.Error("associateEipAddress failed", err)
+		return nil, err
+	}
+
+	retInfo = fmt.Sprintf("InstanceId：%s, Password：%s, EIP: %s", *insId, password, *ipAddr)
+
+	return &retInfo, nil
+}
+
+func generateRandomString(length int) string {
+	rand.Seed(time.Now().UnixNano())
+	charSet := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	result := make([]byte, length)
+	for i := range result {
+		result[i] = charSet[rand.Intn(len(charSet))]
+	}
+	return "L" + string(result)
 }
