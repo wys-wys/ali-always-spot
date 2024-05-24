@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/alibabacloud-go/tea/tea"
 	"github.com/spf13/pflag"
 
 	"github.com/Mr-LvGJ/ali-always-spot/pkg/client"
@@ -81,14 +82,14 @@ func run() error {
 		for {
 			select {
 			case <-tk.C:
-				instances, err := client.DescribeInstances()
+				instances, err := client.DescribeInstances(tea.String(""))
 				if err != nil {
 					log.Println(err)
 					continue
 				}
 				if instances != nil {
 					if len(instances.Instance) != 0 {
-						log.Println("instance exist, skip...")
+						slog.Info("instance exist, skip...")
 					} else {
 						createCh <- struct{}{}
 						<-createDoneCh

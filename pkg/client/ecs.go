@@ -40,10 +40,15 @@ func SetupEcsClient() {
 	ecsClient = _result
 }
 
-func DescribeInstances() (*ecs20140526.DescribeInstancesResponseBodyInstances, error) {
-	resp, err := ecsClient.DescribeInstances(&ecs20140526.DescribeInstancesRequest{
+func DescribeInstances(insId *string) (*ecs20140526.DescribeInstancesResponseBodyInstances, error) {
+	req := &ecs20140526.DescribeInstancesRequest{
 		RegionId: setting.C().RegionId,
-	})
+	}
+	if *insId != "" {
+		req.InstanceIds = tea.String("[\"" + *insId + "\"]")
+	}
+
+	resp, err := ecsClient.DescribeInstances(req)
 	if err != nil {
 		return nil, err
 	}
@@ -151,6 +156,7 @@ func RunInstances() (*string, error) {
 		slog.Error("getVswitchId failed", err)
 		return nil, err
 	}
+	time.Sleep(10 * time.Second)
 
 	password := generateRandomString(10)
 
@@ -190,6 +196,16 @@ func RunInstances() (*string, error) {
 		slog.Error("getOrCreateEip failed", err)
 		return nil, err
 	}
+
+	for {
+		res, _ := DescribeInstances(insId)
+		if *res.Instance[0].Status == "Running" {
+			break
+		}
+		time.Sleep(5 * time.Second)
+	}
+	// Wait EIP
+	time.Sleep(10 * time.Second)
 
 	err = addEipToCBP(eipId, cbpId)
 	if err != nil {

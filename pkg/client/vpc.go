@@ -91,6 +91,7 @@ func ReleaseEips(eips []string) error {
 		if err != nil {
 			return err
 		}
+		slog.Info("successful release eip", "eip", eip)
 	}
 	return nil
 }
