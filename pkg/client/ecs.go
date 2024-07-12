@@ -158,7 +158,7 @@ func RunInstances() (*string, error) {
 	}
 	time.Sleep(10 * time.Second)
 
-	password := generateRandomString(10)
+	password := generateRandomString(10) + "5"
 
 	req := &ecs20140526.RunInstancesRequest{
 		RegionId:        setting.C().RegionId,
