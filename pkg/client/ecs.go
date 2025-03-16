@@ -163,7 +163,7 @@ func RunInstances() (*string, error) {
 	req := &ecs20140526.RunInstancesRequest{
 		RegionId:        setting.C().RegionId,
 		ImageId:         imageId,
-		InstanceType:    tea.String("ecs.t5-lc2m1.nano"),
+		InstanceType:    tea.String("ecs.n1.tiny"),
 		SecurityGroupId: sgId,
 		VSwitchId:       vsId,
 		Password:        tea.String(password),
