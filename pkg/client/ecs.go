@@ -19,7 +19,7 @@ var (
 )
 
 var zoneIds = []string{
-	"cn-hongkong-b",
+	//"cn-hongkong-b",
 	"cn-hongkong-c",
 	"cn-hongkong-d",
 }
@@ -86,7 +86,7 @@ func DescribePriceAndGetAvailableZone() (*string, error) {
 			RegionId:     setting.C().RegionId,
 			ZoneId:       tea.String(zoneId),
 			ResourceType: tea.String("instance"),
-			InstanceType: tea.String("ecs.n1.tiny"),
+			InstanceType: tea.String(""),
 			SystemDisk: &ecs20140526.DescribePriceRequestSystemDisk{
 				Size:     tea.Int32(20),
 				Category: tea.String("cloud_efficiency"),
@@ -163,7 +163,7 @@ func RunInstances() (*string, error) {
 	req := &ecs20140526.RunInstancesRequest{
 		RegionId:        setting.C().RegionId,
 		ImageId:         imageId,
-		InstanceType:    tea.String("ecs.n1.tiny"),
+		InstanceType:    tea.String("ecs.t5-lc2m1.nano"),
 		SecurityGroupId: sgId,
 		VSwitchId:       vsId,
 		Password:        tea.String(password),
